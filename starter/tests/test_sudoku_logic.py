@@ -92,3 +92,143 @@ class TestPuzzleGeneration:
             for j in range(9):
                 if puzzle[i][j] != 0:
                     assert puzzle[i][j] == solution[i][j]
+
+
+class TestSolutionUniqueness:
+    """Tests for solution uniqueness verification."""
+
+    def test_count_solutions_empty_board_has_multiple(self, empty_board):
+        """Test that empty board has multiple solutions."""
+        count = sudoku_logic.count_solutions(empty_board, max_count=2)
+        assert count >= 2
+
+    def test_count_solutions_complete_board_has_one(self, solved_board):
+        """Test that completed board has exactly one solution."""
+        count = sudoku_logic.count_solutions(solved_board)
+        assert count == 1
+
+    def test_count_solutions_respects_max_count(self, empty_board):
+        """Test that count_solutions stops at max_count."""
+        count = sudoku_logic.count_solutions(empty_board, max_count=2)
+        assert count <= 2
+
+    def test_is_valid_puzzle_accepts_solved_board(self, solved_board):
+        """Test that is_valid_puzzle recognizes solved board as valid."""
+        assert sudoku_logic.is_valid_puzzle(solved_board) is True
+
+    def test_is_valid_puzzle_rejects_empty_board(self, empty_board):
+        """Test that is_valid_puzzle rejects empty board (too many solutions)."""
+        assert sudoku_logic.is_valid_puzzle(empty_board) is False
+
+
+class TestCellRemoval:
+    """Tests for intelligent cell removal with uniqueness guarantee."""
+
+    def test_remove_cells_safely_respects_clues(self, solved_board):
+        """Test that remove_cells_safely creates puzzle with target clues."""
+        target_clues = 30
+        puzzle = sudoku_logic.remove_cells_safely(solved_board, target_clues)
+        filled_cells = sum(1 for row in puzzle for cell in row if cell != 0)
+        assert filled_cells == target_clues
+
+    def test_remove_cells_safely_generates_valid_puzzle(self, solved_board):
+        """Test that removed puzzle has exactly one solution."""
+        puzzle = sudoku_logic.remove_cells_safely(solved_board, 35)
+        assert sudoku_logic.is_valid_puzzle(puzzle) is True
+
+    def test_remove_cells_safely_puzzle_matches_solution(self, solved_board):
+        """Test that remaining clues match the solution."""
+        puzzle = sudoku_logic.remove_cells_safely(solved_board, 35)
+        for i in range(9):
+            for j in range(9):
+                if puzzle[i][j] != 0:
+                    assert puzzle[i][j] == solved_board[i][j]
+
+    def test_remove_cells_safely_creates_different_puzzles(self):
+        """Test that multiple calls create different puzzles (randomness)."""
+        board = sudoku_logic.create_empty_board()
+        sudoku_logic.fill_board(board)
+        
+        puzzle1 = sudoku_logic.remove_cells_safely(board, 30)
+        puzzle2 = sudoku_logic.remove_cells_safely(board, 30)
+        
+        # Puzzles should be different (extremely unlikely to be the same)
+        assert puzzle1 != puzzle2
+
+
+class TestDifficultyLevels:
+    """Tests for difficulty level system."""
+
+    def test_difficulty_levels_defined(self):
+        """Test that all difficulty levels are defined."""
+        assert 'easy' in sudoku_logic.DIFFICULTY_LEVELS
+        assert 'medium' in sudoku_logic.DIFFICULTY_LEVELS
+        assert 'hard' in sudoku_logic.DIFFICULTY_LEVELS
+
+    def test_difficulty_levels_ordering(self):
+        """Test that easy > medium > hard (more clues = easier)."""
+        easy_clues = sudoku_logic.DIFFICULTY_LEVELS['easy']
+        medium_clues = sudoku_logic.DIFFICULTY_LEVELS['medium']
+        hard_clues = sudoku_logic.DIFFICULTY_LEVELS['hard']
+        
+        assert easy_clues > medium_clues > hard_clues
+
+    def test_generate_puzzle_with_easy_difficulty(self):
+        """Test puzzle generation with easy difficulty."""
+        puzzle, solution = sudoku_logic.generate_puzzle(difficulty='easy')
+        filled_cells = sum(1 for row in puzzle for cell in row if cell != 0)
+        # Allow 1-2 cell variance due to uniqueness constraint
+        target = sudoku_logic.DIFFICULTY_LEVELS['easy']
+        assert abs(filled_cells - target) <= 2
+        assert sudoku_logic.is_valid_puzzle(puzzle) is True
+
+    def test_generate_puzzle_with_medium_difficulty(self):
+        """Test puzzle generation with medium difficulty."""
+        puzzle, solution = sudoku_logic.generate_puzzle(difficulty='medium')
+        filled_cells = sum(1 for row in puzzle for cell in row if cell != 0)
+        # Allow 1-2 cell variance due to uniqueness constraint
+        target = sudoku_logic.DIFFICULTY_LEVELS['medium']
+        assert abs(filled_cells - target) <= 2
+        assert sudoku_logic.is_valid_puzzle(puzzle) is True
+
+    def test_generate_puzzle_with_hard_difficulty(self):
+        """Test puzzle generation with hard difficulty."""
+        puzzle, solution = sudoku_logic.generate_puzzle(difficulty='hard')
+        filled_cells = sum(1 for row in puzzle for cell in row if cell != 0)
+        # Allow 1-2 cell variance due to uniqueness constraint
+        target = sudoku_logic.DIFFICULTY_LEVELS['hard']
+        assert abs(filled_cells - target) <= 2
+        assert sudoku_logic.is_valid_puzzle(puzzle) is True
+
+    def test_generate_puzzle_clues_parameter_overrides_difficulty(self):
+        """Test that explicit clues parameter overrides difficulty."""
+        custom_clues = 40
+        puzzle, _ = sudoku_logic.generate_puzzle(clues=custom_clues, difficulty='hard')
+        filled_cells = sum(1 for row in puzzle for cell in row if cell != 0)
+        # Should use custom_clues (40), not hard (25)
+        assert filled_cells == custom_clues
+
+    def test_generate_puzzle_defaults_to_medium(self):
+        """Test that no parameters defaults to medium difficulty."""
+        puzzle, _ = sudoku_logic.generate_puzzle()
+        filled_cells = sum(1 for row in puzzle for cell in row if cell != 0)
+        assert filled_cells == sudoku_logic.DIFFICULTY_LEVELS['medium']
+
+    def test_generate_puzzle_invalid_difficulty_raises_error(self):
+        """Test that invalid difficulty raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid difficulty"):
+            sudoku_logic.generate_puzzle(difficulty='impossible')
+
+    def test_difficulty_puzzles_are_valid_and_unique(self):
+        """Test that all difficulty levels generate valid unique puzzles."""
+        for difficulty in ['easy', 'medium', 'hard']:
+            puzzle, solution = sudoku_logic.generate_puzzle(difficulty=difficulty)
+            # Verify unique solution
+            assert sudoku_logic.is_valid_puzzle(puzzle) is True
+            # Verify clues are approximately at expected count
+            # (allow 1-2 variance due to uniqueness constraint)
+            filled = sum(1 for row in puzzle for cell in row if cell != 0)
+            target = sudoku_logic.DIFFICULTY_LEVELS[difficulty]
+            assert abs(filled - target) <= 2
+
+
