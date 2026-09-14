@@ -126,50 +126,232 @@ class TestNewGameRoute:
 
 
 class TestCheckSolutionRoute:
-    """Tests for the /check solution route."""
+    """Tests for the /check solution route with conflict detection."""
 
     def test_check_solution_without_active_game(self, client):
         """Test /check without an active game returns 400."""
-        # Don't create a new game, session has no solution
-        response = client.post('/check', json={'board': []})
+        response = client.post('/check', json={'board': [[0]*9 for _ in range(9)]})
         assert response.status_code == 400
         data = response.get_json()
         assert 'error' in data
 
-    def test_check_solution_with_correct_board(self, client):
-        """Test /check with correct solution."""
-        # Create a new game
+    def test_check_solution_response_structure(self, client):
+        """Test /check response includes all required fields."""
         client.get('/new')
+        board = [[0]*9 for _ in range(9)]
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
         
-        # Get solution from session
+        # Verify all required fields are present
+        assert 'conflicts' in data
+        assert 'incorrect' in data
+        assert 'is_complete' in data
+        assert 'is_solved' in data
+        
+        # Verify correct types
+        assert isinstance(data['conflicts'], list)
+        assert isinstance(data['incorrect'], list)
+        assert isinstance(data['is_complete'], bool)
+        assert isinstance(data['is_solved'], bool)
+
+    def test_check_solution_correct_complete_board(self, client):
+        """Test /check with correct complete solution."""
+        client.get('/new')
         with client.session_transaction() as sess:
             solution = sess['solution']
         
         response = client.post('/check', json={'board': solution})
         assert response.status_code == 200
         data = response.get_json()
-        assert 'incorrect' in data
-        assert data['incorrect'] == []  # No incorrect cells
+        
+        # Should have no conflicts, no incorrect cells
+        assert data['conflicts'] == []
+        assert data['incorrect'] == []
+        assert data['is_complete'] is True
+        assert data['is_solved'] is True
 
-    def test_check_solution_with_incorrect_cells(self, client):
-        """Test /check detects incorrect cells."""
-        # Create a new game
+    def test_check_solution_incomplete_board(self, client):
+        """Test /check with incomplete board (empty cells)."""
+        client.get('/new')
+        with client.session_transaction() as sess:
+            puzzle = sess['puzzle']
+        
+        response = client.post('/check', json={'board': puzzle})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['is_complete'] is False
+        assert data['is_solved'] is False
+
+    def test_check_solution_detects_row_conflict(self, client):
+        """Test /check detects duplicate in same row."""
         client.get('/new')
         
-        # Get solution from session
+        # Create board with duplicate in row 0
+        board = [[0]*9 for _ in range(9)]
+        board[0][0] = 5
+        board[0][1] = 5  # Duplicate in same row
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Both cells should be marked as conflicts
+        assert (0, 0) in data['conflicts'] or [0, 0] in data['conflicts']
+        assert (0, 1) in data['conflicts'] or [0, 1] in data['conflicts']
+
+    def test_check_solution_detects_column_conflict(self, client):
+        """Test /check detects duplicate in same column."""
+        client.get('/new')
+        
+        # Create board with duplicate in column 2
+        board = [[0]*9 for _ in range(9)]
+        board[0][2] = 7
+        board[1][2] = 7  # Duplicate in same column
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Both cells should be marked as conflicts
+        assert (0, 2) in data['conflicts'] or [0, 2] in data['conflicts']
+        assert (1, 2) in data['conflicts'] or [1, 2] in data['conflicts']
+
+    def test_check_solution_detects_box_conflict(self, client):
+        """Test /check detects duplicate in same 3x3 box."""
+        client.get('/new')
+        
+        # Create board with duplicate in top-left 3x3 box
+        board = [[0]*9 for _ in range(9)]
+        board[0][0] = 3  # Top-left box
+        board[1][1] = 3  # Same box (but different row/col)
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Both cells should be marked as conflicts
+        assert (0, 0) in data['conflicts'] or [0, 0] in data['conflicts']
+        assert (1, 1) in data['conflicts'] or [1, 1] in data['conflicts']
+
+    def test_check_solution_no_conflict_for_valid_placement(self, client):
+        """Test /check doesn't flag valid placements as conflicts."""
+        client.get('/new')
+        
+        # Create valid board (no duplicates)
+        board = [[0]*9 for _ in range(9)]
+        board[0][0] = 1
+        board[0][1] = 2
+        board[1][0] = 3
+        board[1][1] = 4
+        # Different rows, columns, and boxes - no conflict
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['conflicts'] == []
+
+    def test_check_solution_detects_incorrect_values(self, client):
+        """Test /check detects incorrect but valid placements."""
+        client.get('/new')
+        
         with client.session_transaction() as sess:
             solution = sess['solution']
         
-        # Create incorrect board (change first cell)
-        incorrect_board = [row[:] for row in solution]
-        incorrect_board[0][0] = (incorrect_board[0][0] % 9) + 1  # Change to different number
+        # Create a simple test board with just one wrong value (no duplicates)
+        board = [[0]*9 for _ in range(9)]
+        board[0][0] = 1  # Place a value
         
-        response = client.post('/check', json={'board': incorrect_board})
+        # If solution has 1 at [0][0], use 2 instead (they differ but valid)
+        if solution[0][0] == 1:
+            board[0][0] = 2
+        
+        response = client.post('/check', json={'board': board})
         assert response.status_code == 200
         data = response.get_json()
-        assert 'incorrect' in data
+        
+        # Should have no conflicts (single value in empty board)
+        assert data['conflicts'] == []
+        # Should detect cell [0][0] as incorrect (different from solution)
         assert len(data['incorrect']) > 0
         assert [0, 0] in data['incorrect']
+
+    def test_check_solution_conflict_overrides_incorrect(self, client):
+        """Test that conflict cells are still flagged even if matching solution."""
+        client.get('/new')
+        
+        # Create board with conflict (duplicate) AND some incorrect cells
+        board = [[0]*9 for _ in range(9)]
+        board[0][0] = 5
+        board[0][1] = 5  # Conflict!
+        board[0][2] = 3  # Different from solution (likely)
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Conflicts should be detected
+        assert len(data['conflicts']) >= 2
+
+    def test_check_solution_empty_cells_not_conflicts(self, client):
+        """Test that empty cells (0) are never marked as conflicts."""
+        client.get('/new')
+        
+        # Create board with empty cells only
+        board = [[0]*9 for _ in range(9)]
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # No conflicts when board only has empty cells
+        assert data['conflicts'] == []
+
+    def test_check_solution_complete_but_incorrect(self, client):
+        """Test /check with complete board that's incorrect."""
+        client.get('/new')
+        
+        with client.session_transaction() as sess:
+            solution = sess['solution']
+        
+        # Create complete board with wrong values
+        board = [[1 for _ in range(9)] for _ in range(9)]  # All 1's
+        
+        response = client.post('/check', json={'board': board})
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['is_complete'] is True
+        assert data['is_solved'] is False
+        # Should have conflicts (many duplicates)
+        assert len(data['conflicts']) > 0
+
+    def test_check_solution_solved_detection_requires_all_conditions(self, client):
+        """Test that is_solved requires complete, no conflicts, no incorrect, and correct."""
+        client.get('/new')
+        
+        with client.session_transaction() as sess:
+            solution = sess['solution']
+        
+        # Test 1: Complete and correct but with one wrong value
+        board1 = [row[:] for row in solution]
+        board1[0][0] = (board1[0][0] % 9) + 1
+        
+        response1 = client.post('/check', json={'board': board1})
+        assert response1.get_json()['is_solved'] is False
+        
+        # Test 2: Complete, correct values, but has conflicts (duplicates)
+        board2 = [[0]*9 for _ in range(9)]
+        board2[0][0] = 1
+        board2[0][1] = 1  # Conflict
+        board2[0][2] = 3
+        
+        response2 = client.post('/check', json={'board': board2})
+        data2 = response2.get_json()
+        if data2['is_complete']:  # If completed after filling
+            assert data2['is_solved'] is False
 
 
 class TestSessionIsolation:
@@ -443,3 +625,201 @@ class TestErrorHandling:
         assert 'incorrect' in data
         # Most cells should be incorrect unless solution is also all zeros
         assert isinstance(data['incorrect'], list)
+
+
+class TestHintEndpoint:
+    """Tests for the /hint endpoint."""
+
+    def test_hint_without_active_game(self, client):
+        """Test /hint without starting a game returns 400."""
+        response = client.post('/hint')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+        assert 'game' in data['error'].lower()
+
+    def test_hint_returns_valid_cell(self, client):
+        """Test /hint returns valid (row, col, value) coordinates."""
+        client.get('/new')
+        response = client.post('/hint')
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Check required fields
+        assert 'row' in data
+        assert 'col' in data
+        assert 'value' in data
+        assert 'hints_used' in data
+        assert 'puzzle' in data
+        
+        # Validate coordinates and value
+        assert 0 <= data['row'] < 9
+        assert 0 <= data['col'] < 9
+        assert 1 <= data['value'] <= 9
+        assert data['hints_used'] == 1
+
+    def test_hint_fills_puzzle_correctly(self, client):
+        """Test that hint correctly fills the puzzle cell."""
+        client.get('/new')
+        
+        # Get the hint
+        response = client.post('/hint')
+        data = response.get_json()
+        row, col, value = data['row'], data['col'], data['value']
+        
+        # Verify puzzle was updated
+        with client.session_transaction() as sess:
+            assert sess['puzzle'][row][col] == value
+            
+        # Verify returned puzzle matches session
+        assert data['puzzle'][row][col] == value
+
+    def test_hint_increments_counter(self, client):
+        """Test that each hint increments hints_used counter."""
+        client.get('/new')
+        
+        # First hint
+        r1 = client.post('/hint')
+        assert r1.get_json()['hints_used'] == 1
+        
+        # Second hint
+        r2 = client.post('/hint')
+        assert r2.get_json()['hints_used'] == 2
+        
+        # Third hint
+        r3 = client.post('/hint')
+        assert r3.get_json()['hints_used'] == 3
+
+    def test_hint_counter_persists_in_session(self, client):
+        """Test that hints_used counter is saved in session."""
+        client.get('/new')
+        
+        # Give 2 hints
+        client.post('/hint')
+        client.post('/hint')
+        
+        # Verify session has correct count
+        with client.session_transaction() as sess:
+            assert sess['hints_used'] == 2
+
+    def test_hint_gives_different_cells(self, client):
+        """Test that multiple hints reveal different cells."""
+        client.get('/new')
+        
+        # Get multiple hints
+        hint1 = client.post('/hint').get_json()
+        hint2 = client.post('/hint').get_json()
+        hint3 = client.post('/hint').get_json()
+        
+        # Cells should be different (extremely unlikely to be same)
+        cells = [
+            (hint1['row'], hint1['col']),
+            (hint2['row'], hint2['col']),
+            (hint3['row'], hint3['col'])
+        ]
+        
+        # At least some should be different
+        assert len(set(cells)) >= 2
+
+    def test_hint_value_matches_solution(self, client):
+        """Test that hint value matches solution."""
+        client.get('/new')
+        
+        # Get session data
+        with client.session_transaction() as sess:
+            solution = sess['solution']
+        
+        # Get a hint
+        hint_response = client.post('/hint')
+        hint_data = hint_response.get_json()
+        row, col, value = hint_data['row'], hint_data['col'], hint_data['value']
+        
+        # Verify hint value matches solution
+        assert solution[row][col] == value
+
+    def test_hint_respects_empty_cells_only(self, client):
+        """Test that hint only fills cells that were originally empty."""
+        client.get('/new')
+        
+        # Get original puzzle
+        with client.session_transaction() as sess:
+            original_puzzle = [row[:] for row in sess['puzzle']]
+        
+        # Get a hint
+        hint_response = client.post('/hint')
+        row, col = hint_response.get_json()['row'], hint_response.get_json()['col']
+        
+        # Cell should have been empty in original
+        assert original_puzzle[row][col] == 0
+
+    def test_hint_puzzle_complete_error(self, client):
+        """Test /hint returns error when puzzle is complete."""
+        client.get('/new?clues=81')  # Full puzzle
+        response = client.post('/hint')
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+        assert 'empty' in data['error'].lower()
+
+    def test_hints_reset_for_new_game(self, client):
+        """Test that hints_used resets when starting new game."""
+        # First game with hints
+        client.get('/new')
+        client.post('/hint')
+        client.post('/hint')
+        
+        with client.session_transaction() as sess:
+            assert sess['hints_used'] == 2
+        
+        # Second game
+        client.get('/new')
+        
+        with client.session_transaction() as sess:
+            assert sess['hints_used'] == 0
+
+    def test_hint_response_includes_updated_puzzle(self, client):
+        """Test that hint response includes the updated puzzle."""
+        client.get('/new')
+        response = client.post('/hint')
+        data = response.get_json()
+        
+        puzzle = data['puzzle']
+        
+        # Verify puzzle structure
+        assert len(puzzle) == 9
+        assert all(len(row) == 9 for row in puzzle)
+        
+        # Verify hinted cell is filled
+        row, col, value = data['row'], data['col'], data['value']
+        assert puzzle[row][col] == value
+
+    def test_multiple_hints_same_game(self, client):
+        """Test providing multiple hints in same game."""
+        client.get('/new')
+        
+        hints = []
+        for i in range(5):
+            response = client.post('/hint')
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data['hints_used'] == i + 1
+            hints.append((data['row'], data['col'], data['value']))
+        
+        # All hints should be valid
+        assert len(hints) == 5
+        
+        # Verify they're different (very unlikely to be same cell twice)
+        cells = [(h[0], h[1]) for h in hints]
+        assert len(set(cells)) >= 4  # At least 4 different cells out of 5
+
+    def test_hint_cell_in_puzzle(self, client):
+        """Test that returned cell coordinates are valid."""
+        client.get('/new')
+        response = client.post('/hint')
+        data = response.get_json()
+        
+        row, col, value = data['row'], data['col'], data['value']
+        puzzle = data['puzzle']
+        
+        # Cell should match the returned value
+        assert puzzle[row][col] == value

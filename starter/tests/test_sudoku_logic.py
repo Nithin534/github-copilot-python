@@ -55,6 +55,108 @@ class TestSudokuRules:
         assert sudoku_logic.is_safe(empty_board, 3, 3, 7) is True
 
 
+class TestConflictDetection:
+    """Tests for find_conflicts function."""
+
+    def test_find_conflicts_empty_board(self, empty_board):
+        """Test that empty board has no conflicts."""
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        assert conflicts == []
+
+    def test_find_conflicts_detects_row_duplicate(self, empty_board):
+        """Test that find_conflicts detects duplicates in row."""
+        empty_board[0][0] = 5
+        empty_board[0][1] = 5
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        
+        # Both cells should be marked as conflicts
+        assert (0, 0) in conflicts
+        assert (0, 1) in conflicts
+
+    def test_find_conflicts_detects_column_duplicate(self, empty_board):
+        """Test that find_conflicts detects duplicates in column."""
+        empty_board[0][2] = 7
+        empty_board[1][2] = 7
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        
+        # Both cells should be marked as conflicts
+        assert (0, 2) in conflicts
+        assert (1, 2) in conflicts
+
+    def test_find_conflicts_detects_box_duplicate(self, empty_board):
+        """Test that find_conflicts detects duplicates in 3x3 box."""
+        empty_board[0][0] = 3  # Top-left box
+        empty_board[1][1] = 3  # Same box, different row/col
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        
+        # Both cells should be marked as conflicts
+        assert (0, 0) in conflicts
+        assert (1, 1) in conflicts
+
+    def test_find_conflicts_detects_all_duplicates_in_row(self, empty_board):
+        """Test that all duplicate cells in row are detected."""
+        empty_board[3][0] = 8
+        empty_board[3][3] = 8
+        empty_board[3][6] = 8
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        
+        # All three should be marked as conflicts
+        assert (3, 0) in conflicts
+        assert (3, 3) in conflicts
+        assert (3, 6) in conflicts
+
+    def test_find_conflicts_no_duplicates_valid_board(self, empty_board):
+        """Test that valid placements don't create conflicts."""
+        # Place numbers with no duplicates in row/col/box
+        empty_board[0][0] = 1
+        empty_board[0][3] = 2
+        empty_board[3][0] = 3
+        empty_board[3][3] = 4
+        
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        assert conflicts == []
+
+    def test_find_conflicts_ignores_empty_cells(self, empty_board):
+        """Test that empty cells (0) are never marked as conflicts."""
+        # Board is already all zeros
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        assert conflicts == []
+
+    def test_find_conflicts_with_solved_board(self, solved_board):
+        """Test that correctly solved board has no conflicts."""
+        conflicts = sudoku_logic.find_conflicts(solved_board)
+        assert conflicts == []
+
+    def test_find_conflicts_multiple_violations(self, empty_board):
+        """Test board with multiple types of violations."""
+        # Row conflict
+        empty_board[0][0] = 1
+        empty_board[0][1] = 1
+        
+        # Column conflict (different from row duplicates)
+        empty_board[3][2] = 2
+        empty_board[5][2] = 2
+        
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        
+        # Should detect all conflicts
+        assert (0, 0) in conflicts
+        assert (0, 1) in conflicts
+        assert (3, 2) in conflicts
+        assert (5, 2) in conflicts
+        assert len(conflicts) == 4
+
+    def test_find_conflicts_returns_tuples(self, empty_board):
+        """Test that find_conflicts returns list of tuples."""
+        empty_board[0][0] = 5
+        empty_board[0][1] = 5
+        conflicts = sudoku_logic.find_conflicts(empty_board)
+        
+        assert isinstance(conflicts, list)
+        assert all(isinstance(cell, tuple) for cell in conflicts)
+        assert all(len(cell) == 2 for cell in conflicts)
+
+
 class TestPuzzleGeneration:
     """Tests for puzzle generation."""
 

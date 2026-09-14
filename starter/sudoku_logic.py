@@ -50,6 +50,74 @@ def is_safe(board: List[List[int]], row: int, col: int, num: int) -> bool:
                 return False
     return True
 
+def find_conflicts(board: List[List[int]]) -> List[Tuple[int, int]]:
+    """
+    Find all cells that violate Sudoku rules (duplicates in row/col/box).
+    
+    Checks each non-empty cell to see if it conflicts with another cell
+    in its row, column, or 3x3 box. Multiple conflicts of the same number
+    in a region all return True (all duplicates are marked as conflicts).
+    
+    Args:
+        board: 9x9 Sudoku board
+        
+    Returns:
+        List of (row, col) tuples where board[row][col] violates Sudoku rules.
+        Returns empty list if no conflicts found.
+        
+    Example:
+        If row 0 has two 5's at columns 2 and 7, both (0,2) and (0,7) returned.
+    """
+    conflicts = []
+    
+    for row in range(SIZE):
+        for col in range(SIZE):
+            cell_value = board[row][col]
+            
+            # Skip empty cells (0 is never a conflict)
+            if cell_value == EMPTY:
+                continue
+            
+            is_conflict = False
+            
+            # Check for duplicate in the same row
+            for x in range(SIZE):
+                if x != col and board[row][x] == cell_value:
+                    is_conflict = True
+                    break
+            
+            if is_conflict:
+                conflicts.append((row, col))
+                continue
+            
+            # Check for duplicate in the same column
+            for x in range(SIZE):
+                if x != row and board[x][col] == cell_value:
+                    is_conflict = True
+                    break
+            
+            if is_conflict:
+                conflicts.append((row, col))
+                continue
+            
+            # Check for duplicate in the same 3x3 box
+            start_row = row - row % 3
+            start_col = col - col % 3
+            for i in range(3):
+                for j in range(3):
+                    box_row = start_row + i
+                    box_col = start_col + j
+                    if (box_row, box_col) != (row, col) and board[box_row][box_col] == cell_value:
+                        is_conflict = True
+                        break
+                if is_conflict:
+                    break
+            
+            if is_conflict:
+                conflicts.append((row, col))
+    
+    return conflicts
+
 # ============================================================================
 # PUZZLE GENERATION - FILL COMPLETE BOARD
 # ============================================================================

@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify, request, session
 import sudoku_logic
 import os
+import random
 
 app = Flask(__name__)
 
@@ -57,6 +58,26 @@ def validate_board(board):
                 return False, f"Cell ({i},{j}) value {cell} is out of range [0-{sudoku_logic.SIZE}]"
     
     return True, None
+
+
+def get_empty_cells(board):
+    """
+    Find all empty cells (value = 0) in a Sudoku board.
+    
+    Args:
+        board: 9x9 puzzle board
+        
+    Returns:
+        List of (row, col) tuples for empty cells
+        Example: [(0,1), (0,2), (1,4), ...]
+        Returns empty list if no empty cells found
+    """
+    empty = []
+    for i in range(sudoku_logic.SIZE):
+        for j in range(sudoku_logic.SIZE):
+            if board[i][j] == 0:  # 0 = empty cell
+                empty.append((i, j))
+    return empty
 
 
 @app.errorhandler(400)
@@ -119,6 +140,7 @@ def new_game():
     # Store puzzle and solution in this player's session
     session['puzzle'] = puzzle
     session['solution'] = solution
+    session['hints_used'] = 0  # Initialize hint counter for new game
     session.modified = True
     
     return jsonify({'puzzle': puzzle})
@@ -126,14 +148,26 @@ def new_game():
 @app.route('/check', methods=['POST'])
 def check_solution():
     """
-    Check player's solution against their session's solution.
+    Validate submitted board for Sudoku violations and correctness.
+    
+    Detects:
+    - Sudoku rule violations (row/column/3x3 box conflicts)
+    - Incorrect values vs solution
+    - Puzzle completion status
     
     Request JSON:
         board: 9x9 list of integers (0-9, where 0 = empty)
     
-    Returns:
-        JSON: {'incorrect': [[row, col], ...]} on success
-        JSON: {'error': 'message'} on error (400)
+    Returns (200):
+        {
+            'conflicts': [[row, col], ...],  # Cells violating Sudoku rules
+            'incorrect': [[row, col], ...],  # Cells with wrong values
+            'is_complete': bool,             # All cells filled?
+            'is_solved': bool                # Puzzle solved correctly?
+        }
+    
+    Errors (400):
+        {'error': 'message'}
     """
     try:
         # Parse JSON (may raise ValueError if malformed)
@@ -158,18 +192,97 @@ def check_solution():
     if solution is None:
         return jsonify({'error': 'No active game. Start a new game with /new'}), 400
     
-    # Check solution
+    # Check for Sudoku rule violations (conflicts)
     try:
+        conflicts = sudoku_logic.find_conflicts(board)
+        
+        # Check for incorrect values against solution
         incorrect = []
         for i in range(sudoku_logic.SIZE):
             for j in range(sudoku_logic.SIZE):
-                if board[i][j] != solution[i][j]:
-                    incorrect.append([i, j])
+                if board[i][j] != 0 and board[i][j] != solution[i][j]:
+                    if [i, j] not in incorrect:
+                        incorrect.append([i, j])
         
-        return jsonify({'incorrect': incorrect})
+        # Check if puzzle is complete (no empty cells)
+        is_complete = all(board[i][j] != 0 
+                         for i in range(sudoku_logic.SIZE) 
+                         for j in range(sudoku_logic.SIZE))
+        
+        # Check if puzzle is correctly solved
+        is_solved = (is_complete and 
+                    len(conflicts) == 0 and 
+                    len(incorrect) == 0 and
+                    board == solution)
+        
+        return jsonify({
+            'conflicts': conflicts,
+            'incorrect': incorrect,
+            'is_complete': is_complete,
+            'is_solved': is_solved
+        })
         
     except Exception as e:
         return jsonify({'error': 'Error checking solution'}), 500
+
+@app.route('/hint', methods=['POST'])
+def hint():
+    """
+    Provide a hint by revealing one empty cell from the current puzzle.
+    
+    Returns:
+        JSON: {
+            'row': int,           # Row of hinted cell (0-8)
+            'col': int,           # Column of hinted cell (0-8)
+            'value': int,         # Correct value (1-9)
+            'hints_used': int,    # Total hints used in this game
+            'puzzle': [[...]]     # Updated puzzle with hint filled
+        }
+        
+    Errors:
+        400: No active game or no empty cells remaining
+    """
+    try:
+        # Check if player has an active game
+        puzzle = session.get('puzzle')
+        solution = session.get('solution')
+        
+        if puzzle is None or solution is None:
+            return jsonify({'error': 'No active game. Start a new game with /new'}), 400
+        
+        # Find all empty cells in current puzzle
+        empty_cells = get_empty_cells(puzzle)
+        
+        if not empty_cells:
+            return jsonify({'error': 'No empty cells remaining - puzzle complete!'}), 400
+        
+        # Pick a random empty cell
+        row, col = random.choice(empty_cells)
+        
+        # Get correct value from solution
+        correct_value = solution[row][col]
+        
+        # Fill the cell in the puzzle
+        puzzle[row][col] = correct_value
+        
+        # Increment hint counter
+        hints_used = session.get('hints_used', 0) + 1
+        
+        # Update session
+        session['puzzle'] = puzzle
+        session['hints_used'] = hints_used
+        session.modified = True
+        
+        return jsonify({
+            'row': row,
+            'col': col,
+            'value': correct_value,
+            'hints_used': hints_used,
+            'puzzle': puzzle
+        })
+        
+    except Exception as e:
+        return jsonify({'error': 'Error providing hint'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
