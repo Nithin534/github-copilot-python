@@ -157,6 +157,94 @@ function updateHintsUsedDisplay() {
 }
 
 // ---------------------------------------------------------------------------
+// Leaderboard (Top 10, persisted in localStorage)
+// ---------------------------------------------------------------------------
+
+const LEADERBOARD_KEY = 'sudoku-top10';
+const MAX_LEADERBOARD_ENTRIES = 10;
+
+function loadLeaderboard() {
+  try {
+    const raw = localStorage.getItem(LEADERBOARD_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Failed to read leaderboard from localStorage:', err);
+    return [];
+  }
+}
+
+function saveLeaderboard(entries) {
+  try {
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(entries));
+    return true;
+  } catch (err) {
+    console.error('Failed to save leaderboard to localStorage:', err);
+    return false;
+  }
+}
+
+/**
+ * Add a completed-game entry, keep only the fastest MAX_LEADERBOARD_ENTRIES
+ * times, persist, and return the updated list.
+ *
+ * entry: { name, timeSeconds, difficulty, hints }
+ */
+function addScore(entry) {
+  const entries = loadLeaderboard();
+  entries.push(entry);
+  entries.sort((a, b) => a.timeSeconds - b.timeSeconds);
+  const trimmed = entries.slice(0, MAX_LEADERBOARD_ENTRIES);
+  saveLeaderboard(trimmed);
+  return trimmed;
+}
+
+function capitalize(word) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function renderLeaderboard() {
+  const tbody = document.getElementById('leaderboard-body');
+  const entries = loadLeaderboard();
+
+  tbody.innerHTML = '';
+
+  if (entries.length === 0) {
+    const row = document.createElement('tr');
+    row.id = 'leaderboard-empty-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.textContent = 'No scores yet — finish a puzzle to be the first!';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  entries.forEach((entry, index) => {
+    const row = document.createElement('tr');
+
+    const rankCell = document.createElement('td');
+    rankCell.textContent = String(index + 1);
+
+    const nameCell = document.createElement('td');
+    nameCell.textContent = entry.name;
+
+    const timeCell = document.createElement('td');
+    timeCell.textContent = formatTime(entry.timeSeconds);
+
+    const levelCell = document.createElement('td');
+    levelCell.textContent = capitalize(entry.difficulty || 'medium');
+
+    const hintsCell = document.createElement('td');
+    hintsCell.textContent = String(entry.hints);
+
+    row.append(rankCell, nameCell, timeCell, levelCell, hintsCell);
+    tbody.appendChild(row);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Game actions
 // ---------------------------------------------------------------------------
 
@@ -214,7 +302,7 @@ async function checkSolution() {
     }
   }
 
-  if (data.solved) {
+  if (data.is_solved) {
     handlePuzzleSolved();
   } else if (incorrectSet.size === 0 && conflictSet.size === 0) {
     showMessage('Looks good so far — keep going!', 'success');
@@ -312,13 +400,13 @@ closeModalBtn.addEventListener('click', () => {
 
 saveScoreBtn.addEventListener('click', () => {
   const name = playerNameInput.value.trim() || 'Anonymous';
-  // Leaderboard persistence (localStorage) is wired up in a later step.
-  console.log('Score to save:', {
+  addScore({
     name,
-    time: state.timerSeconds,
+    timeSeconds: state.timerSeconds,
     difficulty: state.difficulty,
     hints: state.hintsUsed,
   });
+  renderLeaderboard();
   modalEl.classList.add('hidden');
 });
 
@@ -328,5 +416,6 @@ saveScoreBtn.addEventListener('click', () => {
 
 window.addEventListener('load', () => {
   initTheme();
+  renderLeaderboard();
   newGame();
 });

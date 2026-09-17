@@ -30,17 +30,36 @@
 
     <section class="board-panel">
       <div id="sudoku-board" role="grid" aria-label="Sudoku board"></div>
-    
+
       <div class="action-buttons">
         <button id="check-solution" class="secondary-button" type="button">Check</button>
         <button id="hint-button" class="secondary-button" type="button">Hint</button>
       </div>
-      
 
       <div id="message" class="message" role="status" aria-live="polite"></div>
       <div id="hints-used" class="hints-used"></div>
     </section>
   </main>
+
+  <section class="leaderboard-panel">
+    <h2>Top 10 Fastest Times</h2>
+    <table class="leaderboard-table">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Name</th>
+          <th>Time</th>
+          <th>Level</th>
+          <th>Hints</th>
+        </tr>
+      </thead>
+      <tbody id="leaderboard-body">
+        <tr id="leaderboard-empty-row">
+          <td colspan="5">No scores yet — finish a puzzle to be the first!</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
 
   <div id="completion-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="completion-title">
     <div class="modal-content">
