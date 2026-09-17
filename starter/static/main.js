@@ -377,6 +377,79 @@ function toggleTheme() {
 }
 
 // ---------------------------------------------------------------------------
+// Live conflict detection (client-side, no server round trip)
+// ---------------------------------------------------------------------------
+//
+// NOTE ON A REJECTED COPILOT SUGGESTION:
+// Copilot's first idea for "instant feedback on invalid moves" was to call
+// /check on the server every time the user types a number. I said no to
+// that — a network request per keystroke would make typing feel laggy and
+// hammer the server for no good reason. Catching duplicate numbers in a
+// row/column/box doesn't need the solution, so it doesn't need the server
+// at all — it can just be worked out from the board that's already on
+// screen. findLiveConflicts() below does exactly that, instantly, with
+// zero network calls.
+//
+// The server is still used for the Check button (which does need the
+// solution to say what's actually wrong) — this is only for catching
+// duplicate numbers the moment you type them.
+
+function findLiveConflicts(board) {
+  const conflicts = new Set();
+
+  function checkGroup(positions) {
+    const seen = {};
+    for (const [row, col] of positions) {
+      const value = board[row][col];
+      if (value === 0) continue;
+      if (!seen[value]) seen[value] = [];
+      seen[value].push(`${row}-${col}`);
+    }
+    for (const keys of Object.values(seen)) {
+      if (keys.length > 1) {
+        keys.forEach((k) => conflicts.add(k));
+      }
+    }
+  }
+
+  for (let row = 0; row < SIZE; row++) {
+    checkGroup(Array.from({ length: SIZE }, (_, col) => [row, col]));
+  }
+  for (let col = 0; col < SIZE; col++) {
+    checkGroup(Array.from({ length: SIZE }, (_, row) => [row, col]));
+  }
+  for (let boxRow = 0; boxRow < SIZE; boxRow += 3) {
+    for (let boxCol = 0; boxCol < SIZE; boxCol += 3) {
+      const positions = [];
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          positions.push([boxRow + i, boxCol + j]);
+        }
+      }
+      checkGroup(positions);
+    }
+  }
+
+  return conflicts;
+}
+
+function applyLiveConflictHighlighting() {
+  const board = readBoardFromDom();
+  const conflicts = findLiveConflicts(board);
+
+  for (let row = 0; row < SIZE; row++) {
+    for (let col = 0; col < SIZE; col++) {
+      const cell = cellAt(row, col);
+      if (cell.disabled) continue; // don't touch prefilled/hinted cells
+      cell.classList.remove('incorrect', 'conflict');
+      if (conflicts.has(`${row}-${col}`)) {
+        cell.classList.add('conflict');
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Event wiring (event delegation on the board, one listener)
 // ---------------------------------------------------------------------------
 
@@ -386,7 +459,9 @@ boardEl.addEventListener('input', (event) => {
 
   const cleaned = target.value.replace(/[^1-9]/g, '');
   target.value = cleaned;
-  target.classList.remove('incorrect', 'conflict');
+
+  // Immediate, client-side feedback -- no server call, no delay.
+  applyLiveConflictHighlighting();
 });
 
 newGameBtn.addEventListener('click', newGame);
