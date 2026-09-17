@@ -1,6 +1,6 @@
 # Copilot Instructions — Sudoku Project
 
-Hey Copilot — a few things to keep in mind while helping me on this project.
+Hey Copilot, a few things to remember while helping me on this project.
 
 - A Flask web app for playing Sudoku. I'm upgrading a simple version with difficulty levels, hints, a timer, dark mode, and a top-10 leaderboard.
 

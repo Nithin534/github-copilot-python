@@ -1,85 +1,318 @@
+/* ============================================================
+   THEME VARIABLES — light mode (default) and dark mode
+   ============================================================ */
+:root {
+  --bg-color: #f4f4f4;
+  --text-color: #222;
+  --board-bg: #fff;
+  --board-border: #333;
+  --cell-border: #bbb;
+  --cell-bg: #fafafa;
+  --cell-bg-alt: #eef1f7;      /* alternate 3x3 box shading */
+  --cell-prefilled-bg: #e0e0e0;
+  --cell-prefilled-text: #222;
+  --cell-hint-bg: #b2f2bb;     /* distinct hint color */
+  --cell-hint-text: #1b5e20;
+  --cell-incorrect-bg: #ffcdd2;
+  --cell-conflict-bg: #ffe0b2;
+  --cell-focus-bg: #e0f7fa;
+  --button-bg: #1976d2;
+  --button-bg-hover: #1565c0;
+  --button-text: #fff;
+  --message-success: #388e3c;
+  --message-error: #d32f2f;
+  --modal-overlay: rgba(0, 0, 0, 0.5);
+  --modal-bg: #fff;
+}
+
+:root[data-theme="dark"] {
+  --bg-color: #121212;
+  --text-color: #eaeaea;
+  --board-bg: #1e1e1e;
+  --board-border: #eaeaea;
+  --cell-border: #444;
+  --cell-bg: #262626;
+  --cell-bg-alt: #2f2f38;
+  --cell-prefilled-bg: #3a3a3a;
+  --cell-prefilled-text: #f0f0f0;
+  --cell-hint-bg: #2e7d32;
+  --cell-hint-text: #eaffea;
+  --cell-incorrect-bg: #7f1d1d;
+  --cell-conflict-bg: #7a4a12;
+  --cell-focus-bg: #204048;
+  --button-bg: #4a90d9;
+  --button-bg-hover: #3b7bc0;
+  --button-text: #fff;
+  --message-success: #66bb6a;
+  --message-error: #ef5350;
+  --modal-overlay: rgba(0, 0, 0, 0.75);
+  --modal-bg: #1e1e1e;
+}
+
+/* ============================================================
+   BASE LAYOUT
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+
 body {
-    font-family: Arial, sans-serif;
-    background: #f4f4f4;
-    text-align: center;
-    margin: 0;
-    padding: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: var(--bg-color);
+  color: var(--text-color);
+  margin: 0;
+  padding: 0 1rem 2rem;
+  transition: background 0.2s, color 0.2s;
 }
 
-h1 {
-    margin-top: 30px;
-    color: #333;
+.topbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 0 1rem;
+  position: relative;
 }
 
+.topbar h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 2.2rem);
+}
+
+.icon-button {
+  position: absolute;
+  right: 0;
+  background: none;
+  border: 1px solid var(--cell-border);
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--text-color);
+}
+
+.game-layout {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 160px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.control-group select {
+  padding: 0.4rem;
+  font-size: 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--cell-border);
+  background: var(--cell-bg);
+  color: var(--text-color);
+}
+
+.timer {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.board-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* ============================================================
+   SUDOKU BOARD
+   ============================================================ */
 #sudoku-board {
-    display: inline-block;
-    margin: 30px auto;
-    border: 4px solid #333;
-    background: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.sudoku-row {
-    display: flex;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  width: min(90vw, 450px);
+  height: min(90vw, 450px);
+  border: 3px solid var(--board-border);
+  background: var(--board-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .sudoku-cell {
-    width: 40px;
-    height: 40px;
-    border: 1px solid #bbb;
-    text-align: center;
-    font-size: 20px;
-    outline: none;
-    background: #fafafa;
-    transition: background 0.2s;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--cell-border);
+  text-align: center;
+  font-size: clamp(0.9rem, 3.5vw, 1.3rem);
+  outline: none;
+  background: var(--cell-bg);
+  color: var(--text-color);
+  transition: background 0.15s;
+  padding: 0;
+}
+
+/* Alternating 3x3 box shading -- boxes (0,0),(0,2),(1,1),(2,0),(2,2) get
+   the alt color, giving the classic checkerboard-of-boxes look, with
+   colors coming from CSS variables so dark mode "just works". */
+.sudoku-cell.box-alt {
+  background: var(--cell-bg-alt);
 }
 
 .sudoku-cell:focus {
-    background: #e0f7fa;
+  background: var(--cell-focus-bg);
 }
 
 .sudoku-cell.prefilled {
-    background: #e0e0e0;
-    font-weight: bold;
-    color: #333;
+  background: var(--cell-prefilled-bg);
+  color: var(--cell-prefilled-text);
+  font-weight: bold;
+}
+
+.sudoku-cell.hinted {
+  background: var(--cell-hint-bg) !important;
+  color: var(--cell-hint-text) !important;
+  font-weight: bold;
 }
 
 .sudoku-cell.incorrect {
-    background: #ffcdd2;
+  background: var(--cell-incorrect-bg) !important;
 }
 
-.sudoku-cell:nth-child(3),
-.sudoku-cell:nth-child(6) {
-    border-right: 3px solid #333;
+.sudoku-cell.conflict {
+  background: var(--cell-conflict-bg) !important;
 }
 
-.sudoku-row:nth-child(3) .sudoku-cell,
-.sudoku-row:nth-child(6) .sudoku-cell {
-    border-bottom: 3px solid #333;
+/* Thicker borders every 3 cells to show the 3x3 box grid, without
+   shifting cell size (border-box keeps layout stable). */
+.sudoku-cell:nth-child(9n+3),
+.sudoku-cell:nth-child(9n+6) {
+  border-right: 3px solid var(--board-border);
 }
 
-.controls {
-    margin: 20px auto;
+.sudoku-cell:nth-child(n+19):nth-child(-n+27),
+.sudoku-cell:nth-child(n+46):nth-child(-n+54) {
+  border-bottom: 3px solid var(--board-border);
+}
+
+/* ============================================================
+   BUTTONS & CONTROLS
+   ============================================================ */
+.action-buttons {
+  display: flex;
+  gap: 0.75rem;
 }
 
 button {
-    padding: 8px 18px;
-    margin: 0 8px;
-    font-size: 16px;
-    border: none;
-    background: #1976d2;
-    color: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
+  padding: 0.55rem 1.3rem;
+  font-size: 1rem;
+  border: none;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
 button:hover {
-    background: #1565c0;
+  background: var(--button-bg-hover);
 }
 
-#message {
-    margin-left: 20px;
-    font-size: 16px;
-    color: #d32f2f;
+.primary-button {
+  font-weight: 600;
 }
+
+/* ============================================================
+   MESSAGES
+   ============================================================ */
+.message {
+  font-size: 1rem;
+  font-weight: 600;
+  min-height: 1.4em;
+}
+
+.message.success {
+  color: var(--message-success);
+}
+
+.message.error {
+  color: var(--message-error);
+}
+
+.hints-used {
+  font-size: 0.9rem;
+  color: var(--text-color);
+  opacity: 0.75;
+}
+
+/* ============================================================
+   COMPLETION MODAL
+   ============================================================ */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--modal-bg);
+  color: var(--text-color);
+  padding: 2rem;
+  border-radius: 8px;
+  max-width: 90vw;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h2 {
+  margin: 0 0 0.25rem;
+}
+
+.modal-content input {
+  padding: 0.5rem;
+  font-size: 1rem;
+  border-radius: 4px;
+  border: 1px solid var(--cell-border);
+  background: var(--cell-bg);
+  color: var(--text-color);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 600px) {
+  .game-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .controls-panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+}
+
